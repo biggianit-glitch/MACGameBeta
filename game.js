@@ -1,4 +1,4 @@
-// My Amneal Career Quest - v18 height safety + 16-bit polish structure: original MAC-themed level pacing, logo start screen, Excel at Your Role skills screen, bonus/gig rooms
+// My Amneal Career Quest - v22 integrated selectors + one-way platforms + guaranteed 4 skills: original MAC-themed level pacing, logo start screen, Excel at Your Role skills screen, bonus/gig rooms
 // - Unique drawn background per level (lobby, lab, warehouse, etc.)
 // - Per-level randomized platform layouts, 2-3 min to complete
 // - Press UP at elevator to board → fireworks → level complete
@@ -40,7 +40,7 @@ let levelStartScore=0, levelEnded=false;
 let currentWorldLabel="";
 let invincible=false, invincibleTimer=null;
 let player, cursors, shiftKey, spaceKey, pauseKey, escKey, enterKey;
-let platforms, coins, skillItems, enemies, goalZone, powerUps;
+let platforms, oneWayPlatforms, coins, skillItems, enemies, goalZone, powerUps;
 let enemySpawnPoints=[];
 let ui={}, timerEvent;
 let lastJumpDown=false;
@@ -69,6 +69,25 @@ const FRAME_WALK_1 = 1;
 const FRAME_WALK_2 = 2;
 const FRAME_JUMP   = 3;
 const FRAME_CROUCH = 4;
+
+// Larger in-level player size, closer to the platformer reference proportions.
+// The source sheets remain 396x793 per frame; these values only affect how large
+// the player appears in the level and how the invisible physics body fits.
+const PLAYER_W = 64;
+const PLAYER_H = 96;
+const PLAYER_CROUCH_H = 58;
+
+// Native-frame collision box values tuned for PLAYER_W/PLAYER_H.
+// These keep the character larger visually while keeping the hitbox fair.
+const PLAYER_BODY_W = 220;
+const PLAYER_BODY_H = 580;
+const PLAYER_BODY_OFFSET_X = 88;
+const PLAYER_BODY_OFFSET_Y = 150;
+
+const PLAYER_CROUCH_BODY_W = 220;
+const PLAYER_CROUCH_BODY_H = 430;
+const PLAYER_CROUCH_OFFSET_X = 88;
+const PLAYER_CROUCH_OFFSET_Y = 290;
 const skillChoices=[
   ["Communication","💬"],["Collaboration","🤝"],["Problem Solving","🧩"],
   ["Adaptability","↪"],["Leadership","★"],["Data Thinking","▥"]
@@ -459,11 +478,68 @@ function mulberry32(seed) {
 // ─── PRELOAD / CREATE ────────────────────────────────────────────────────────
 function preload() {
   this.load.image("macLogo","assets/myamnealcareer_logo.png");
+  this.load.image("uiStartScreen","assets/ui_start_screen.png");
+  this.load.image("uiAvatarScreen","assets/ui_avatar_screen.png");
+  this.load.image("uiSkillsScreen","assets/ui_skills_screen.png");
+  this.load.image("uiMapScreen","assets/ui_map_screen.png");
+  this.load.image("uiStartBgClean","assets/ui_start_bg_clean.png");
+  this.load.image("uiTitleLogo","assets/ui_title_logo.png");
+  this.load.image("btnStartOrange","assets/btn_start_orange.png");
+  this.load.image("btnLeaderboardBlue","assets/btn_leaderboard_blue.png");
+  this.load.image("btnHowToBlue","assets/btn_howto_blue.png");
+  this.load.image("uiPressStart","assets/ui_press_start.png");
+
+  // World 1-1 background pack
+  this.load.image("w1bgSky","assets/world1/bg/bg_sky_clouds.png");
+  this.load.image("w1bgCity","assets/world1/bg/bg_city_skyline.png");
+  this.load.image("w1bgCampus","assets/world1/bg/bg_campus_left.png");
+  this.load.image("w1bgPark","assets/world1/bg/bg_park_right.png");
+
+  // World 1-1 sliced tiles
+  this.load.image("w1GrassGroundLeft","assets/world1/tiles/grass_ground_left.png");
+  this.load.image("w1GrassGroundMid","assets/world1/tiles/grass_ground_mid.png");
+  this.load.image("w1GrassGroundRight","assets/world1/tiles/grass_ground_right.png");
+  this.load.image("w1StonePlatformLeft","assets/world1/tiles/stone_platform_left.png");
+  this.load.image("w1StonePlatformMid","assets/world1/tiles/stone_platform_mid.png");
+  this.load.image("w1StonePlatformRight","assets/world1/tiles/stone_platform_right.png");
+  this.load.image("w1OneWayPlatformLeft","assets/world1/tiles/one_way_platform_left.png");
+  this.load.image("w1OneWayPlatformMid","assets/world1/tiles/one_way_platform_mid.png");
+  this.load.image("w1OneWayPlatformRight","assets/world1/tiles/one_way_platform_right.png");
+
+  // World 1-1 sliced props
+  this.load.image("w1BuildingLarge","assets/world1/props/amneal_building_large.png");
+  this.load.image("w1BuildingSmall","assets/world1/props/amneal_building_small.png");
+  this.load.image("w1Elevator","assets/world1/props/elevator.png");
+  this.load.image("w1ElevatorArrow","assets/world1/props/elevator_arrow.png");
+  this.load.image("w1BlueBanner","assets/world1/props/blue_banner.png");
+  this.load.image("w1SignDirectional","assets/world1/props/sign_directional.png");
+  this.load.image("w1LampPost","assets/world1/props/lamp_post.png");
+  this.load.image("w1Bench","assets/world1/props/bench.png");
+  this.load.image("w1TreeLarge","assets/world1/props/tree_large.png");
+  this.load.image("w1TreeSmall","assets/world1/props/tree_small.png");
+  this.load.image("w1Bush","assets/world1/props/bush.png");
+  this.load.image("w1HedgePlanter","assets/world1/props/hedge_planter.png");
+  this.load.image("w1FlowerBed","assets/world1/props/flower_bed.png");
+  this.load.image("w1AmnealSignLarge","assets/world1/props/amneal_sign_large.png");
+
+  // World 1-1 sliced collectibles and enemies
+  this.load.spritesheet("w1CoinSheet","assets/world1/collectibles/coin_sheet.png", { frameWidth:95, frameHeight:105 });
+  this.load.image("w1SkillGrowth","assets/world1/collectibles/skill_growth.png");
+  this.load.image("w1SkillPeople","assets/world1/collectibles/skill_people.png");
+  this.load.image("w1SkillIdea","assets/world1/collectibles/skill_idea.png");
+  this.load.image("w1ShieldPowerup","assets/world1/collectibles/shield_powerup.png");
+  this.load.image("w1StarPowerup","assets/world1/collectibles/star_powerup.png");
+  this.load.spritesheet("w1SmallBotWalk","assets/world1/enemies/small_bot_walk_sheet.png", { frameWidth:103, frameHeight:136 });
+  this.load.spritesheet("w1LargeBotWalk","assets/world1/enemies/large_bot_walk_sheet.png", { frameWidth:230, frameHeight:192 });
+
   avatars.forEach(a=>{
     this.load.spritesheet(a.sheetKey,
       "assets/"+a.sheetKey+".png",
       { frameWidth: SHEET_FRAME_W, frameHeight: SHEET_FRAME_H }
     );
+
+    // Selector portrait used only on the character selection screen.
+    this.load.image(a.key + "_selector", "assets/" + a.key + "_selector.png");
   });
 }
 
@@ -484,6 +560,34 @@ function create() {
     this.anims.create({key:k+"_crouch",frames:[{key:k,frame:FRAME_CROUCH}], frameRate:1, repeat:0});
   });
   makeTinyTextures(this);
+
+  if(!this.anims.exists("w1CoinSpin")){
+    this.anims.create({
+      key:"w1CoinSpin",
+      frames:this.anims.generateFrameNumbers("w1CoinSheet",{start:0,end:3}),
+      frameRate:8,
+      repeat:-1
+    });
+  }
+
+  if(!this.anims.exists("w1SmallBotWalkAnim")){
+    this.anims.create({
+      key:"w1SmallBotWalkAnim",
+      frames:this.anims.generateFrameNumbers("w1SmallBotWalk",{start:0,end:3}),
+      frameRate:7,
+      repeat:-1
+    });
+  }
+
+  if(!this.anims.exists("w1LargeBotWalkAnim")){
+    this.anims.create({
+      key:"w1LargeBotWalkAnim",
+      frames:this.anims.generateFrameNumbers("w1LargeBotWalk",{start:0,end:3}),
+      frameRate:6,
+      repeat:-1
+    });
+  }
+
   showStart(this);
 }
 
@@ -516,11 +620,13 @@ function update() {
 
   const ducking=cursors.down.isDown&&player.body.touching.down;
   if(ducking){
-    player.setDisplaySize(48,44);
-    player.body.setSize(281,648,false); player.body.setOffset(57,120);
+    player.setDisplaySize(PLAYER_W, PLAYER_CROUCH_H);
+    player.body.setSize(PLAYER_CROUCH_BODY_W, PLAYER_CROUCH_BODY_H, false);
+    player.body.setOffset(PLAYER_CROUCH_OFFSET_X, PLAYER_CROUCH_OFFSET_Y);
   } else {
-    player.setDisplaySize(48,72);
-    player.body.setSize(281,659,false); player.body.setOffset(57,67);
+    player.setDisplaySize(PLAYER_W, PLAYER_H);
+    player.body.setSize(PLAYER_BODY_W, PLAYER_BODY_H, false);
+    player.body.setOffset(PLAYER_BODY_OFFSET_X, PLAYER_BODY_OFFSET_Y);
   }
 
   const jumpKey=spaceKey.isDown;
@@ -767,6 +873,19 @@ function button(s,x,y,lbl,cb,w=300,col=0x1b7f3a){
 function titleText(s,x,y,txt,sz=38){
   return s.add.text(x,y,txt,{fontSize:`${sz}px`,fill:"#fff",fontStyle:"bold",stroke:"#000",strokeThickness:6}).setOrigin(0.5);
 }
+function imageMenuButton(s,x,y,key,cb,scale=1){
+  const img=s.add.image(x,y,key).setScale(scale).setInteractive({useHandCursor:true});
+  const wrapped=()=>{
+    initAudio();
+    if(audioCtx && audioCtx.state==='suspended') audioCtx.resume().then(()=>{ if(musicMode && !currentMusic) playMusic(musicMode); });
+    else if(musicMode && !currentMusic) playMusic(musicMode);
+    cb();
+  };
+  img.on("pointerdown",wrapped);
+  img.on("pointerover",()=>img.setScale(scale*1.03));
+  img.on("pointerout",()=>img.setScale(scale));
+  return img;
+}
 function popText(s,x,y,txt,col=0xffffff){
   const hex="#"+col.toString(16).padStart(6,"0");
   const t=s.add.text(x,y,txt,{fontSize:"18px",fill:hex,stroke:"#000",strokeThickness:4,fontStyle:"bold"}).setOrigin(0.5);
@@ -790,76 +909,151 @@ function clearAll(scene) {
 
 // ─── START SCREEN ────────────────────────────────────────────────────────────
 function showStart(scene) {
-  clearAll(scene); state="start";
-  // Try to init audio immediately (works if browser allows autoplay, else first click triggers it)
+  clearAll(scene);
+  state = "start";
+
   initAudio();
-  if(audioCtx && audioCtx.state!=="suspended") playMusic("start");
-  else musicMode="start"; // will be picked up on first click via initAudio()
+  if (audioCtx && audioCtx.state !== "suspended") playMusic("start");
+  else musicMode = "start";
 
-  const g=scene.add.graphics();
-  g.fillGradientStyle(0x5ec2ff,0x5ec2ff,0xa0d8ff,0xa0d8ff,1); g.fillRect(0,0,W,H);
+  // Clean campus background only. No baked-in HUD, no character, no duplicate menu.
+  scene.add.image(W / 2, H / 2, "uiStartBgClean").setDisplaySize(W, H);
+  scene.add.rectangle(0, 0, W, H, 0x000000, 0.05).setOrigin(0, 0);
 
-  // Original pixel campus landscape
-  g.fillStyle(0x6fc36f,1); g.fillRect(0,385,W,155);
-  g.fillStyle(0x4a9a4a,1); g.fillRect(0,430,W,110);
-  for(let x=30;x<W;x+=95){
-    g.fillStyle(0x216b32,1); g.fillRect(x,325,20,85);
-    g.fillStyle(0x2f9a42,1); g.fillCircle(x+10,310,35);
-    g.fillStyle(0x56bd58,1); g.fillCircle(x-8,320,24);
-    g.fillCircle(x+27,325,26);
-  }
+  // Subtle dark overlay on the right side so the menu reads clearly.
+  scene.add.rectangle(710, 270, 410, 455, 0x061830, 0.84).setStrokeStyle(4, 0xffd55a);
+  scene.add.rectangle(710, 270, 382, 427, 0x0d2238, 0.42).setStrokeStyle(2, 0xffffff, 0.30);
 
-  // Amneal-style building
-  g.fillStyle(0xd8d0c8,1); g.fillRect(610,205,230,180);
-  g.fillStyle(0x0044aa,1); g.fillRect(610,205,230,14);
-  for(let wx=632;wx<=790;wx+=45){
-    for(let wy=235;wy<=330;wy+=38){
-      g.fillStyle(0x7ec8e3,0.85); g.fillRect(wx,wy,28,24);
-      g.fillStyle(0xffffff,0.35); g.fillRect(wx,wy,9,24);
+  // Title treatment built in code so there is no white image box.
+  scene.add.text(710, 82, "my", {
+    fontSize: "48px",
+    fill: "#ffffff",
+    fontStyle: "bold",
+    stroke: "#061830",
+    strokeThickness: 7
+  }).setOrigin(0.5);
+
+  scene.add.text(710, 124, "AMNEAL", {
+    fontSize: "48px",
+    fill: "#0a1b31",
+    fontStyle: "bold",
+    stroke: "#ffffff",
+    strokeThickness: 6
+  }).setOrigin(0.5);
+
+  scene.add.text(710, 158, "career", {
+    fontSize: "34px",
+    fill: "#111111",
+    fontStyle: "bold",
+    stroke: "#ffffff",
+    strokeThickness: 5
+  }).setOrigin(0.5);
+
+  scene.add.text(710, 220, "QUEST", {
+    fontSize: "68px",
+    fill: "#ffb000",
+    fontStyle: "bold",
+    stroke: "#071421",
+    strokeThickness: 9
+  }).setOrigin(0.5);
+
+  // Small shooting-star accent.
+  const starG = scene.add.graphics();
+  starG.lineStyle(8, 0xffb000, 1);
+  starG.strokeLineShape(new Phaser.Geom.Line(805, 145, 885, 105));
+  starG.fillStyle(0xffd55a, 1);
+  starG.fillCircle(895, 100, 13);
+
+  scene.add.text(
+    710,
+    272,
+    "Build your profile. Add skills. Complete gigs.\nAdvance through your career journey.",
+    {
+      fontSize: "16px",
+      fill: "#ffffff",
+      align: "center",
+      stroke: "#000000",
+      strokeThickness: 4,
+      lineSpacing: 4
     }
+  ).setOrigin(0.5);
+
+  function startScreenButton(x, y, label, callback, color, selected = false) {
+    const w = 292;
+    const h = 58;
+    const stroke = selected ? 0xffd55a : 0xffffff;
+    const shadow = scene.add.rectangle(x + 5, y + 6, w, h, 0x000000, 0.42);
+    const base = scene.add.rectangle(x, y, w, h, color, 1)
+      .setStrokeStyle(4, stroke)
+      .setInteractive({ useHandCursor: true });
+
+    // Beveled 16-bit style.
+    scene.add.rectangle(x, y - 18, w - 16, 10, 0xffffff, 0.22);
+    scene.add.rectangle(x, y + 19, w - 16, 9, 0x000000, 0.25);
+    scene.add.rectangle(x - w / 2 + 10, y, 10, h - 12, 0xffffff, 0.08);
+    scene.add.rectangle(x + w / 2 - 10, y, 10, h - 12, 0x000000, 0.18);
+
+    const txt = scene.add.text(x, y, label, {
+      fontSize: "24px",
+      fill: "#ffffff",
+      fontStyle: "bold",
+      stroke: "#000000",
+      strokeThickness: 5
+    }).setOrigin(0.5);
+
+    if (selected) {
+      scene.add.triangle(x - w / 2 - 28, y, 0, -14, 0, 14, 24, 0, 0xffd55a)
+        .setStrokeStyle(2, 0x000000);
+    }
+
+    const wrapped = () => {
+      initAudio();
+      if (audioCtx && audioCtx.state === "suspended") {
+        audioCtx.resume().then(() => {
+          if (musicMode && !currentMusic) playMusic(musicMode);
+        });
+      } else if (musicMode && !currentMusic) {
+        playMusic(musicMode);
+      }
+      callback();
+    };
+
+    base.on("pointerdown", wrapped);
+    txt.setInteractive({ useHandCursor: true }).on("pointerdown", wrapped);
+    base.on("pointerover", () => {
+      base.setScale(1.025);
+      txt.setScale(1.025);
+      shadow.setScale(1.025);
+    });
+    base.on("pointerout", () => {
+      base.setScale(1);
+      txt.setScale(1);
+      shadow.setScale(1);
+    });
+
+    return { base, txt };
   }
-  g.fillStyle(0x3f4c5a,1); g.fillRect(706,335,36,50);
-  scene.add.text(725,195,"AMNEAL",{fontSize:"14px",fill:"#003388",fontStyle:"bold"}).setOrigin(0.5);
 
-  // Uploaded MyAmnealCareer logo, only used on the start screen
-  scene.add.image(250,82,"macLogo").setDisplaySize(300,127);
+  startScreenButton(710, 345, "START JOURNEY", () => showAvatarSelect(scene), 0x1f8f42, true);
+  startScreenButton(710, 420, "LEADERBOARD", () => showLeaderboard(scene), 0x165a9e);
+  startScreenButton(710, 495, "HOW TO PLAY", () => showHowTo(scene), 0x1f78b4);
 
-  scene.add.text(250,175,"CAREER QUEST",{
-    fontSize:"36px",fill:"#ffd700",fontStyle:"bold",
-    stroke:"#081728",strokeThickness:7
+  scene.add.text(360, 510, "PRESS START", {
+    fontSize: "22px",
+    fill: "#ffffff",
+    fontStyle: "bold",
+    stroke: "#000000",
+    strokeThickness: 5
   }).setOrigin(0.5);
 
-  scene.add.text(250,220,"Build skills. Complete gigs. Advance your career path.",{
-    fontSize:"16px",fill:"#ffffff",fontStyle:"bold",
-    stroke:"#081728",strokeThickness:3,
-    align:"center",
-    wordWrap:{width:420}
+  scene.add.text(710, 526, "Start Journey opens character selection", {
+    fontSize: "13px",
+    fill: "#dce9f5",
+    stroke: "#000",
+    strokeThickness: 3
   }).setOrigin(0.5);
-
-  button(scene,250,300,"START JOURNEY",()=>showAvatarSelect(scene),285,0x2e9d3f);
-  button(scene,250,360,"LEADERBOARD",()=>showLeaderboard(scene),285,0x1f78b4);
-  button(scene,250,420,"HOW TO PLAY",()=>showHowTo(scene),285,0x8e44ad);
-
-  scene.add.text(705,425,"Original MAC-themed platformer\nwith classic 8-bit pacing",{
-    fontSize:"15px",fill:"#ffffff",align:"center",
-    stroke:"#081728",strokeThickness:4,
-    wordWrap:{width:330}
-  }).setOrigin(0.5);
-
-  const ps=scene.add.text(250,485,"PRESS START TO PLAY",{
-    fontSize:"16px",fill:"#ffd700",stroke:"#000",strokeThickness:3
-  }).setOrigin(0.5);
-  scene.time.addEvent({delay:500,loop:true,callback:()=>ps.setVisible(!ps.visible)});
 }
 
-// Helper: draw a simple flask inline (no texture needed on menus)
-function drawFlask(scene,x,y,alpha){
-  const g=scene.add.graphics().setAlpha(alpha);
-  g.fillStyle(0x80c8e8,0.6); g.fillRect(x+6,y-26,12,20); g.fillTriangle(x+6,y-6,x-8,y+16,x+20,y+16);
-  g.lineStyle(2,0x60a0c0,0.8); g.strokeRect(x+6,y-26,12,20); g.strokeTriangle(x+6,y-6,x-8,y+16,x+20,y+16);
-}
-
-// ─── HOW TO PLAY ─────────────────────────────────────────────────────────────
 function showHowTo(scene) {
   playMusic("menu");
   clearAll(scene); state="how";
@@ -893,271 +1087,293 @@ function showHowTo(scene) {
 // ─── AVATAR SELECT ───────────────────────────────────────────────────────────
 function showAvatarSelect(scene) {
   playMusic("menu");
-  clearAll(scene); state="avatar";
+  clearAll(scene);
+  state = "avatar";
   scene.cameras.main.setBackgroundColor("#071421");
 
-  for(let i=0;i<55;i++){
-    scene.add.circle(
-      Phaser.Math.Between(0,W),
-      Phaser.Math.Between(0,H),
-      Phaser.Math.Between(1,2),
-      0xffffff,
-      Phaser.Math.FloatBetween(0.25,0.8)
-    );
-  }
+  // Clean selection background using the same visual language as the title screen.
+  scene.add.image(W / 2, H / 2, "uiStartBgClean").setDisplaySize(W, H);
+  scene.add.rectangle(0, 0, W, H, 0x000000, 0.32).setOrigin(0, 0);
 
-  panel(scene,480,268,930,472);
-  scene.add.rectangle(480,44,910,54,0x000080,0.95).setStrokeStyle(3,0xffd700);
-  titleText(scene,480,44,"CHOOSE YOUR PERSONA",30);
+  // Header panel.
+  scene.add.rectangle(480, 52, 860, 68, 0x061830, 0.92).setStrokeStyle(4, 0xffd55a);
+  scene.add.text(480, 42, "CHOOSE YOUR PERSONA", {
+    fontSize: "32px",
+    fill: "#ffcf4d",
+    fontStyle: "bold",
+    stroke: "#000000",
+    strokeThickness: 6
+  }).setOrigin(0.5);
 
-  avatars.forEach((a,i)=>{
-    const x=108+i*180;
-    scene.add.rectangle(x,258,158,340,0x0a1e30,0.98).setStrokeStyle(3,a.color);
-    scene.add.rectangle(x,258,150,332,a.color,0.07);
+  scene.add.text(480, 79, "Pick the role path that will begin your MyAmnealCareer Quest.", {
+    fontSize: "15px",
+    fill: "#ffffff",
+    stroke: "#000000",
+    strokeThickness: 3
+  }).setOrigin(0.5);
 
-    // Correct aspect ratio: sheet is 396×793 ≈ 0.5 wide:tall; display at 120×240
-    scene.add.image(x,185,a.sheetKey,FRAME_IDLE).setDisplaySize(120,240);
+  const roleLabels = [
+    "People\nLeadership",
+    "Professional",
+    "Scientific /\nResearch",
+    "Business\nEnablement",
+    "Operations /\nWarehouse"
+  ];
 
-    scene.add.rectangle(x,326,148,30,0x050f1c,0.96).setStrokeStyle(2,a.color);
-    scene.add.text(x,326,a.name.toUpperCase(),{
-      fontSize:"14px",fill:"#fff",fontStyle:"bold"
+  const roleDescriptions = [
+    "Lead teams and help people grow.",
+    "Build expertise in a specialized field.",
+    "Explore science, data, and discovery.",
+    "Support the business and enable results.",
+    "Keep production, quality, and supply moving."
+  ];
+
+  const cardColors = [0xec2f7b, 0x2f80bd, 0x23a86d, 0xf25f22, 0x8b55a3];
+
+  avatars.forEach((a, i) => {
+    const x = 100 + i * 190;
+    const cardY = 285;
+    const cardW = 168;
+    const cardH = 350;
+    const color = cardColors[i] || a.color;
+
+    // Card shadow and body.
+    scene.add.rectangle(x + 5, cardY + 6, cardW, cardH, 0x000000, 0.42);
+    scene.add.rectangle(x, cardY, cardW, cardH, 0x071421, 0.93).setStrokeStyle(4, color);
+    scene.add.rectangle(x, cardY - cardH / 2 + 12, cardW - 14, 8, 0xffffff, 0.12);
+    scene.add.rectangle(x, cardY + cardH / 2 - 10, cardW - 14, 8, 0x000000, 0.26);
+
+    // Name badge.
+    scene.add.rectangle(x, 125, cardW - 20, 40, color, 0.95).setStrokeStyle(2, 0xffffff);
+    scene.add.text(x, 125, a.name.toUpperCase(), {
+      fontSize: "17px",
+      fill: "#ffffff",
+      fontStyle: "bold",
+      stroke: "#000000",
+      strokeThickness: 4
     }).setOrigin(0.5);
 
-    button(scene,x,370,"SELECT",()=>{
-      selectedAvatar=i;
+    // Larger persona art.
+    scene.add.image(x, 252, a.key + "_selector").setDisplaySize(138, 198);
+    scene.add.ellipse(x, 346, 100, 20, 0x000000, 0.32);
+
+    // Role label.
+    scene.add.rectangle(x, 380, cardW - 26, 54, 0x0d2238, 0.90).setStrokeStyle(2, color);
+    scene.add.text(x, 380, roleLabels[i], {
+      fontSize: "14px",
+      fill: "#ffcf4d",
+      align: "center",
+      fontStyle: "bold",
+      stroke: "#000000",
+      strokeThickness: 3,
+      lineSpacing: -2
+    }).setOrigin(0.5);
+
+    // Short description.
+    scene.add.text(x, 435, roleDescriptions[i], {
+      fontSize: "12px",
+      fill: "#dce8f3",
+      align: "center",
+      wordWrap: { width: cardW - 28 },
+      lineSpacing: 1
+    }).setOrigin(0.5);
+
+    // Graphic-style select button built in Phaser.
+    const btnY = 490;
+    const btn = scene.add.rectangle(x, btnY, cardW - 34, 42, color, 1)
+      .setStrokeStyle(3, 0xffffff)
+      .setInteractive({ useHandCursor: true });
+
+    scene.add.rectangle(x, btnY - 11, cardW - 48, 6, 0xffffff, 0.22);
+    scene.add.rectangle(x, btnY + 12, cardW - 48, 6, 0x000000, 0.22);
+
+    const btnText = scene.add.text(x, btnY, "SELECT", {
+      fontSize: "16px",
+      fill: "#ffffff",
+      fontStyle: "bold",
+      stroke: "#000000",
+      strokeThickness: 4
+    }).setOrigin(0.5);
+
+    const choose = () => {
+      selectedAvatar = i;
       showSkillSelect(scene);
-    },128,a.color);
+    };
+
+    btn.on("pointerdown", choose);
+    btnText.setInteractive({ useHandCursor: true }).on("pointerdown", choose);
+    btn.on("pointerover", () => {
+      btn.setScale(1.04);
+      btnText.setScale(1.04);
+    });
+    btn.on("pointerout", () => {
+      btn.setScale(1);
+      btnText.setScale(1);
+    });
   });
 
-  scene.add.text(480,511,"Choose your persona to begin your MyAmnealCareer Journey.",{
-    fontSize:"19px",fill:"#ffffff",fontStyle:"bold",
-    stroke:"#000",strokeThickness:3,
-    align:"center", wordWrap:{width:840}
+  // Footer navigation.
+  scene.add.rectangle(480, 528, 860, 34, 0x061830, 0.82).setStrokeStyle(2, 0xffffff, 0.35);
+  scene.add.text(480, 528, "Choose a persona to continue to the skills screen.", {
+    fontSize: "14px",
+    fill: "#ffffff",
+    stroke: "#000000",
+    strokeThickness: 3
   }).setOrigin(0.5);
+
+  const back = scene.add.rectangle(78, 52, 110, 38, 0x8e2c2c, 1)
+    .setStrokeStyle(3, 0xffffff)
+    .setInteractive({ useHandCursor: true });
+
+  scene.add.text(78, 52, "BACK", {
+    fontSize: "15px",
+    fill: "#ffffff",
+    fontStyle: "bold",
+    stroke: "#000000",
+    strokeThickness: 4
+  }).setOrigin(0.5);
+
+  back.on("pointerdown", () => showStart(scene));
 }
 
-// ─── SKILL SELECT ────────────────────────────────────────────────────────────
 function showSkillSelect(scene) {
   playMusic("menu");
   clearAll(scene); state="skills"; selectedSkills=[];
   scene.cameras.main.setBackgroundColor("#071421");
 
-  const g=scene.add.graphics();
-  g.fillGradientStyle(0x071421,0x071421,0x0d2d4a,0x0d2d4a,1); g.fillRect(0,0,W,H);
+  scene.add.image(W/2,H/2,"uiSkillsScreen").setDisplaySize(W,H);
+  scene.add.rectangle(0,0,W,H,0x000000,0.22).setOrigin(0,0);
 
-  panel(scene,480,285,900,450,0x061830);
+  const avatar=avatars[selectedAvatar || 0];
 
-  titleText(scene,480,48,"EXCEL AT YOUR ROLE",32);
-  scene.add.text(480,88,"Add 3 starting skills to begin your career path.",{
-    fontSize:"19px",fill:"#ffffff",fontStyle:"bold",
-    stroke:"#000",strokeThickness:3
+  scene.add.rectangle(230,270,270,420,0x061830,0.90).setStrokeStyle(4,avatar.color);
+  scene.add.text(230,82,"YOUR PERSONA",{
+    fontSize:"18px",fill:"#ffffff",fontStyle:"bold",stroke:"#000",strokeThickness:4
   }).setOrigin(0.5);
-
-  scene.add.text(480,125,
-    "Choose the skills your character brings today. During the game, you will collect additional skills, complete gigs, connect with mentors, and advance to your next career milestone.",
-    {fontSize:"14px",fill:"#d8e6f3",align:"center",wordWrap:{width:790}}
+  scene.add.image(230,225,avatar.key + "_selector").setDisplaySize(170,244);
+  scene.add.rectangle(230,362,170,32,avatar.color,0.92).setStrokeStyle(2,0xffffff);
+  scene.add.text(230,362,avatar.name.toUpperCase(),{
+    fontSize:"16px",fill:"#ffffff",fontStyle:"bold",stroke:"#000",strokeThickness:3
+  }).setOrigin(0.5);
+  scene.add.text(230,414,
+    "Pick 3 starting skills. These represent the strengths your character brings into the journey.",
+    {fontSize:"14px",fill:"#dce8f3",align:"center",wordWrap:{width:210}}
   ).setOrigin(0.5);
 
-  const sText=scene.add.text(300,485,"SELECTED: 0 / 3",{
-    fontSize:"20px",fill:"#fff",fontStyle:"bold",stroke:"#000",strokeThickness:3
+  scene.add.rectangle(655,270,540,420,0x061830,0.90).setStrokeStyle(4,0xffd55a);
+  titleText(scene,655,58,"EXCEL AT YOUR ROLE",30);
+  scene.add.text(655,96,"Add 3 starting skills to begin your career path.",{
+    fontSize:"17px",fill:"#ffffff",fontStyle:"bold",stroke:"#000",strokeThickness:3
+  }).setOrigin(0.5);
+  scene.add.text(655,128,
+    "You will collect additional skills in each level, complete gigs, connect with mentors, and progress through your next opportunity.",
+    {fontSize:"14px",fill:"#dce8f3",align:"center",wordWrap:{width:460}}
+  ).setOrigin(0.5);
+
+  const sText=scene.add.text(655,434,"SELECTED: 0 / 3",{
+    fontSize:"22px",fill:"#fff",fontStyle:"bold",stroke:"#000",strokeThickness:4
   }).setOrigin(0.5);
 
-  const cBtn=button(scene,675,485,"CONTINUE",()=>{if(selectedSkills.length===3)showMap(scene);},275,0x555555);
+  const cBtn=button(scene,655,482,"CONTINUE",()=>{ if(selectedSkills.length===3)showMap(scene); },250,0x555555);
+  const updateContinue=()=>{
+    sText.setText(`SELECTED: ${selectedSkills.length} / 3`);
+    cBtn.box.setFillStyle(selectedSkills.length===3 ? 0x1b7f3a : 0x555555);
+  };
 
   skillChoices.forEach((s,i)=>{
-    const x=170+(i%3)*310, y=235+Math.floor(i/3)*110;
-    const b=scene.add.rectangle(x,y,245,76,0x102a43,0.95)
-      .setStrokeStyle(3,0x2f80bd)
-      .setInteractive({useHandCursor:true});
+    const col=i%2, row=Math.floor(i/2);
+    const x=520 + col*270, y=210 + row*82;
+    const card=scene.add.rectangle(x,y,230,60,0x0f2740,0.94).setStrokeStyle(3,0x2f80bd).setInteractive({useHandCursor:true});
+    const emoji=scene.add.text(x-84,y,s[1],{fontSize:"24px",fill:"#ffd55a",stroke:"#000",strokeThickness:3}).setOrigin(0.5);
+    const lbl=scene.add.text(x-40,y,s[0],{fontSize:"16px",fill:"#ffffff",fontStyle:"bold",stroke:"#000",strokeThickness:3}).setOrigin(0,0.5);
+    const dot=scene.add.circle(x+92,y,11,0x29435a).setStrokeStyle(2,0xffffff);
 
-    scene.add.text(x-90,y-8,s[1],{fontSize:"29px",fill:"#fff"}).setOrigin(0.5);
-    scene.add.text(x+20,y-13,s[0].toUpperCase(),{
-      fontSize:"15px",fill:"#ffffff",align:"center",fontStyle:"bold",
-      wordWrap:{width:160},stroke:"#000",strokeThickness:3
-    }).setOrigin(0.5);
-    scene.add.text(x+20,y+20,"Click to add/remove",{
-      fontSize:"12px",fill:"#a9c8e8"
-    }).setOrigin(0.5);
-
-    b.on("pointerdown",()=>{
-      if(selectedSkills.includes(s[0])){
-        selectedSkills=selectedSkills.filter(v=>v!==s[0]);
-        b.setFillStyle(0x102a43);
+    const toggle=()=>{
+      const idx=selectedSkills.indexOf(s[0]);
+      if(idx>-1){
+        selectedSkills.splice(idx,1);
       } else if(selectedSkills.length<3){
         selectedSkills.push(s[0]);
-        b.setFillStyle(0x155f3d);
-        popText(scene,x,y-50,"✓ "+s[0]);
       }
-      sText.setText("SELECTED: "+selectedSkills.length+" / 3");
-      cBtn.box.setFillStyle(selectedSkills.length===3?0x1f78b4:0x555555);
-    });
+      const chosen=selectedSkills.includes(s[0]);
+      card.setStrokeStyle(3,chosen ? 0xffd55a : 0x2f80bd);
+      dot.setFillStyle(chosen ? 0x1b7f3a : 0x29435a);
+      updateContinue();
+    };
+    card.on("pointerdown",toggle);
+    lbl.setInteractive({useHandCursor:true}).on("pointerdown",toggle);
+    emoji.setInteractive({useHandCursor:true}).on("pointerdown",toggle);
   });
+
+  button(scene,140,510,"BACK",()=>showAvatarSelect(scene),130,0x8e2c2c);
+  updateContinue();
 }
 
-// ─── MAP ─────────────────────────────────────────────────────────────────────
 function showMap(scene) {
   playMusic("menu");
   clearAll(scene); state="map";
 
-  const g=scene.add.graphics();
+  scene.add.image(W/2,H/2,"uiMapScreen").setDisplaySize(W,H);
+  scene.add.rectangle(0,0,W,H,0x000000,0.14).setOrigin(0,0);
 
-  // ── MAP BACKGROUND: parchment / geographic feel ────────────────────────────
-  g.fillGradientStyle(0xb8d4a8,0xb8d4a8,0xa8c498,0xa8c498,1);
-  g.fillRect(0,0,W,H);
+  scene.add.rectangle(480,42,910,54,0x061830,0.88).setStrokeStyle(4,0xffd55a);
+  titleText(scene,480,42,"CAREER JOURNEY MAP",28);
 
-  // Grid overlay (map grid)
-  g.lineStyle(1,0x90ac78,0.45);
-  for(let x=0;x<W;x+=55) g.strokeLineShape(new Phaser.Geom.Line(x,0,x,H));
-  for(let y=0;y<H;y+=55) g.strokeLineShape(new Phaser.Geom.Line(0,y,W,y));
+  scene.add.rectangle(150,495,250,78,0x061830,0.88).setStrokeStyle(3,0xffffff);
+  scene.add.text(150,476,"PERSONA",{fontSize:"13px",fill:"#dce8f3",fontStyle:"bold"}).setOrigin(0.5);
+  scene.add.image(85,503,avatars[selectedAvatar||0].key + "_selector").setDisplaySize(48,68);
+  scene.add.text(175,502,avatars[selectedAvatar||0].name.toUpperCase(),{fontSize:"18px",fill:"#ffffff",fontStyle:"bold",stroke:"#000",strokeThickness:3}).setOrigin(0.5);
 
-  // Map border
-  g.lineStyle(10,0x7a5820,1); g.strokeRect(5,5,W-10,H-10);
-  g.lineStyle(4,0xd4a840,0.9); g.strokeRect(14,14,W-28,H-28);
-  g.lineStyle(2,0xb88830,0.5); g.strokeRect(20,20,W-40,H-40);
+  scene.add.rectangle(470,495,290,78,0x061830,0.88).setStrokeStyle(3,0xffffff);
+  scene.add.text(470,476,"STARTING SKILLS",{fontSize:"13px",fill:"#dce8f3",fontStyle:"bold"}).setOrigin(0.5);
+  scene.add.text(470,505,(selectedSkills||[]).join("  •  ") || "No skills selected",{fontSize:"14px",fill:"#ffffff",align:"center",wordWrap:{width:250}}).setOrigin(0.5);
 
-  // Water bodies (blue)
-  g.fillStyle(0x7ab8d8,0.6); g.fillEllipse(810,410,240,110);
-  g.fillStyle(0x6aaac8,0.5); g.fillEllipse(75,390,160,80);
-  g.fillStyle(0x7ab8d8,0.4); g.fillEllipse(480,480,300,55);
-  // water ripples
-  g.lineStyle(1,0xaad4f0,0.5);
-  g.strokeEllipse(810,410,200,80); g.strokeEllipse(75,390,120,55);
+  scene.add.rectangle(820,495,220,78,0x061830,0.88).setStrokeStyle(3,0xffffff);
+  scene.add.text(820,475,"SCORE  " + String(score).padStart(5,"0"),{fontSize:"18px",fill:"#ffd55a",fontStyle:"bold",stroke:"#000",strokeThickness:3}).setOrigin(0.5);
+  scene.add.text(820,505,"TRIES  " + attempts,{fontSize:"18px",fill:"#ffffff",fontStyle:"bold",stroke:"#000",strokeThickness:3}).setOrigin(0.5);
 
-  // Forest patches (dark green)
-  g.fillStyle(0x3a6e30,0.55);
-  [40,140,240,340,440,640,760,860].forEach((x,i)=>{
-    g.fillEllipse(x, 70+Math.sin(i)*20, 55+Math.cos(i)*15, 45+Math.sin(i)*10);
+  const nodes=[
+    {x:110,y:220,label:"1-1\nCorporate Lobby"},
+    {x:240,y:152,label:"1-2\nR&D Lab"},
+    {x:405,y:154,label:"1-3\nManufacturing"},
+    {x:563,y:152,label:"1-4\nConference Center"},
+    {x:716,y:154,label:"1-5\nSupply Chain"},
+    {x:778,y:276,label:"1-6\nField Sales"},
+    {x:655,y:372,label:"1-7\nQuality"},
+    {x:496,y:400,label:"1-8\nLearning Hub"},
+    {x:320,y:372,label:"1-9\nInnovation"},
+    {x:160,y:374,label:"1-10\nCareer Summit"}
+  ];
+
+  nodes.forEach((n,i)=>{
+    const levelNum=i+1;
+    const unlocked=levelNum<=unlockedLevel;
+    const completed=levelNum<unlockedLevel;
+    const ringColor=completed ? 0x27d17f : unlocked ? 0xffd55a : 0x7a7a7a;
+    const fillColor=completed ? 0x145a36 : unlocked ? 0x8b5b12 : 0x555555;
+
+    scene.add.circle(n.x,n.y,27,fillColor,0.95).setStrokeStyle(5,ringColor);
+    scene.add.circle(n.x,n.y,19,0xffffff,0.12).setStrokeStyle(2,0xffffff,0.4);
+    scene.add.text(n.x,n.y,completed ? "✓" : String(levelNum),{
+      fontSize:completed ? "22px" : "18px",fill:"#ffffff",fontStyle:"bold",stroke:"#000",strokeThickness:4
+    }).setOrigin(0.5);
+    scene.add.text(n.x,n.y+38,n.label,{
+      fontSize:"11px",fill:"#ffffff",align:"center",stroke:"#000",strokeThickness:3
+    }).setOrigin(0.5,0);
+
+    if(unlocked){
+      const hit=scene.add.circle(n.x,n.y,30,0xffffff,0.001).setInteractive({useHandCursor:true});
+      hit.on("pointerdown",()=>startLevel(scene,levelNum));
+    }
   });
-  g.fillStyle(0x4a8a3c,0.4);
-  [80,180,300,500,680,820].forEach((x,i)=>g.fillEllipse(x,55+Math.sin(i*1.3)*15,40,32));
 
-  // Hills / mountains
-  g.fillStyle(0x8a7060,0.45);
-  [[120,460],[300,465],[620,458],[780,462],[920,455]].forEach(([x,y])=>{
-    g.fillTriangle(x,y,x-50,y+50,x+50,y+50);
-    g.fillTriangle(x-25,y+15,x-65,y+50,x+15,y+50);
-  });
-  g.fillStyle(0xdde8d0,0.5);
-  [[120,462],[300,467],[620,460],[780,464]].forEach(([x,y])=>g.fillTriangle(x,y,x-12,y+18,x+12,y+18));
-
-  // ── WINDING CAREER PATH between level nodes ───────────────────────────────
-  // Nodes: row1=(105,165),(290,165),(475,165),(660,165),(845,165)
-  //        row2=(105,320),(290,320),(475,320),(660,320),(845,320)
-  // Path order: 1→2→3→4→5 then 5↓6 then 6→7→8→9→10 (zigzag / U shape)
-  const nodeX=(i)=>105+(i%5)*185;
-  const nodeY=(i)=>i<5?165:325;
-
-  // Outer road shadow
-  g.lineStyle(14,0x7a5820,0.55);
-  for(let i=0;i<9;i++){
-    const ax=nodeX(i), ay=nodeY(i), bx=nodeX(i+1), by=nodeY(i+1);
-    if(i===4){ // the turn from row1 end to row2 start: curved
-      g.strokeLineShape(new Phaser.Geom.Line(ax,ay,ax,by));
-      g.strokeLineShape(new Phaser.Geom.Line(ax,by,nodeX(5),by));
-    } else {
-      g.strokeLineShape(new Phaser.Geom.Line(ax,ay,bx,by));
-    }
-  }
-  // Road surface
-  g.lineStyle(9,0xf0d880,0.9);
-  for(let i=0;i<9;i++){
-    const ax=nodeX(i), ay=nodeY(i), bx=nodeX(i+1), by=nodeY(i+1);
-    if(i===4){
-      g.strokeLineShape(new Phaser.Geom.Line(ax,ay,ax,by));
-      g.strokeLineShape(new Phaser.Geom.Line(ax,by,nodeX(5),by));
-    } else {
-      g.strokeLineShape(new Phaser.Geom.Line(ax,ay,bx,by));
-    }
-  }
-  // Dashed centre line
-  g.lineStyle(3,0xffffff,0.5);
-  for(let i=0;i<9;i++){
-    const ax=nodeX(i), ay=nodeY(i), bx=nodeX(i+1), by=nodeY(i+1);
-    if(i===4){
-      for(let t=0;t<1;t+=0.15) g.strokeLineShape(new Phaser.Geom.Line(ax,ay+t*(by-ay),ax,ay+(t+0.08)*(by-ay)));
-      for(let t=0;t<1;t+=0.1) g.strokeLineShape(new Phaser.Geom.Line(ax+t*(nodeX(5)-ax),by,ax+(t+0.06)*(nodeX(5)-ax),by));
-    } else {
-      for(let t=0;t<1;t+=0.12) g.strokeLineShape(new Phaser.Geom.Line(ax+t*(bx-ax),ay+t*(by-ay),ax+(t+0.07)*(bx-ax),ay+(t+0.07)*(by-ay)));
-    }
-  }
-
-  // ── COMPASS ROSE ─────────────────────────────────────────────────────────
-  const cx=W-60, cy=H-60;
-  g.fillStyle(0xffffff,0.75); g.fillCircle(cx,cy,28);
-  g.lineStyle(2,0x7a5820,0.9); g.strokeCircle(cx,cy,28); g.strokeCircle(cx,cy,20);
-  g.fillStyle(0xff2222,0.9); g.fillTriangle(cx,cy-26,cx-6,cy,cx+6,cy);
-  g.fillStyle(0xffffff,0.9); g.fillTriangle(cx,cy+26,cx-6,cy,cx+6,cy);
-  g.fillStyle(0xffffff,0.9); g.fillTriangle(cx-26,cy,cx,cy-6,cx,cy+6);
-  g.fillStyle(0xffffff,0.9); g.fillTriangle(cx+26,cy,cx,cy-6,cx,cy+6);
-  scene.add.text(cx,cy-34,"N",{fontSize:"11px",fill:"#7a3010",fontStyle:"bold",stroke:"#fff",strokeThickness:2}).setOrigin(0.5);
-
-  // ── MAP TITLE ─────────────────────────────────────────────────────────────
-  scene.add.rectangle(260,32,500,44,0x5a3008,0.88).setStrokeStyle(3,0xd4a840);
-  scene.add.text(260,32,"★  CAREER JOURNEY MAP  ★",{
-    fontSize:"19px",fill:"#ffd700",fontStyle:"bold",stroke:"#000",strokeThickness:3
+  scene.add.text(480,92,"Select the next stop on your career journey.",{
+    fontSize:"16px",fill:"#ffffff",stroke:"#000",strokeThickness:3
   }).setOrigin(0.5);
 
-  // ── LEVEL NODES ──────────────────────────────────────────────────────────
-  for(let i=0;i<levels.length;i++){
-    const n=i+1;
-    const x=nodeX(i), y=nodeY(i);
-    const completed=n<unlockedLevel;
-    const unlocked=n<=unlockedLevel;
-    const current=n===unlockedLevel;
-
-    // Pin shadow
-    scene.add.circle(x+3,y+3,28,0x000000,0.25);
-    // Pin fill
-    const fill = completed ? 0x22aa66 : unlocked ? (current?0xffd700:0xf4d03f) : 0x888888;
-    const node=scene.add.circle(x,y,28,fill)
-      .setStrokeStyle(4,unlocked?0xffffff:0xaaaaaa)
-      .setInteractive({useHandCursor:unlocked});
-
-    // Inner ring
-    scene.add.circle(x,y,19,0x00000,0.15);
-
-    // Level number or checkmark
-    scene.add.text(x,y,completed?"✓":String(n),{
-      fontSize:completed?"20px":(n>=10?"14px":"17px"),
-      fill:completed?"#fff":(unlocked?"#111":"#777"),
-      fontStyle:"bold",stroke:completed?"#000":"#000",strokeThickness:completed?3:1
-    }).setOrigin(0.5);
-
-    // "NEXT" badge on current level
-    if(current){
-      scene.add.rectangle(x,y-44,58,20,0xff8800,0.95).setStrokeStyle(2,0xffffff);
-      scene.add.text(x,y-44,"► NEXT",{fontSize:"11px",fill:"#fff",fontStyle:"bold"}).setOrigin(0.5);
-    }
-
-    // Location name label - looks like a map label
-    const shortName=levels[i].name.replace("Corporate HQ Lobby","HQ Lobby")
-      .replace("Manufacturing Floor","Manufacturing").replace("Supply Chain Warehouse","Supply Chain")
-      .replace("Sales District Office","Sales Office").replace("Global Expansion Hub","Global Hub");
-    const labelBg=scene.add.rectangle(x,y+(i<5?49:49),shortName.length*5.8+14,19,0x5a3008,0.8);
-    scene.add.text(x,y+(i<5?49:49),shortName,{
-      fontSize:"10px",fill:"#ffeebb",align:"center",wordWrap:{width:135}
-    }).setOrigin(0.5);
-
-    if(unlocked) node.on("pointerdown",()=>startLevel(scene,n));
-  }
-
-  // ── SCORE / TRIES / LEGEND ────────────────────────────────────────────────
-  scene.add.rectangle(480,H-30,W,42,0x5a3008,0.88).setStrokeStyle(0);
-  scene.add.text(100,H-30,"SCORE: "+score,{fontSize:"17px",fill:"#ffd700",fontStyle:"bold"}).setOrigin(0.5);
-  scene.add.text(300,H-30,"TRIES: "+attempts,{fontSize:"17px",fill:"#ffffff",fontStyle:"bold"}).setOrigin(0.5);
-
-  // Legend
-  scene.add.rectangle(585,H-30,110,26,0x22aa66,0.8).setStrokeStyle(2,0xffffff);
-  scene.add.text(585,H-30,"✓ Done",{fontSize:"12px",fill:"#fff",fontStyle:"bold"}).setOrigin(0.5);
-  scene.add.rectangle(700,H-30,110,26,0xffd700,0.8).setStrokeStyle(2,0xffffff);
-  scene.add.text(700,H-30,"► Next",{fontSize:"12px",fill:"#111",fontStyle:"bold"}).setOrigin(0.5);
-  scene.add.rectangle(815,H-30,110,26,0x888888,0.8).setStrokeStyle(2,0xffffff);
-  scene.add.text(815,H-30,"🔒 Locked",{fontSize:"12px",fill:"#fff",fontStyle:"bold"}).setOrigin(0.5);
-
-  button(scene,W-80,H-60,"RESET",()=>{score=0;attempts=3;unlockedLevel=1;showStart(scene);},120,0x8e2c2c);
+  button(scene,875,64,"BACK",()=>showSkillSelect(scene),120,0x8e2c2c);
 }
 
-// ─── LEVEL ───────────────────────────────────────────────────────────────────
 function startLevel(scene,n) {
   clearAll(scene); state="level";
   currentLevel=n;
@@ -1178,11 +1394,12 @@ function startLevel(scene,n) {
   drawUniqueBG(scene, n, level);
   drawRetroForegroundPolish(scene,n);
 
-  platforms=scene.physics.add.staticGroup();
-  coins    =scene.physics.add.group({allowGravity:false});
-  skillItems=scene.physics.add.group({allowGravity:false});
-  powerUps =scene.physics.add.group({allowGravity:false});
-  enemies  =scene.physics.add.group();
+  platforms = scene.physics.add.staticGroup();
+  oneWayPlatforms = scene.physics.add.staticGroup();
+  coins = scene.physics.add.group({allowGravity:false});
+  skillItems = scene.physics.add.group({allowGravity:false});
+  powerUps = scene.physics.add.group({allowGravity:false});
+  enemies = scene.physics.add.group();
 
   // Use hand-designed layout (0-indexed)
   const layout = LAYOUT_DEFS[(n-1) % LAYOUT_DEFS.length];
@@ -1196,15 +1413,14 @@ function startLevel(scene,n) {
   // Build continuous ground with gaps
   buildGroundWithGaps(scene, gaps);
 
-  // Floating platforms + skills on skill-flagged ones
-  const sk=level.skill;
-  activePlats.forEach(p=>{
+  // Floating platforms
+  const sk = level.skill;
+  activePlats.forEach(p => {
     makePlatform(scene, p.x, p.y, p.w, p.type);
-    if(p.skill && p.skillIdx!=null && p.skillIdx<sk.length){
-      // Skill sits on top of its platform — y is platform top minus sprite half-height
-      makeSkill(scene, p.x, p.y-38, sk[p.skillIdx]);
-    }
   });
+
+  // Always place exactly 4 level skills, even if platform shaping removes a skill platform.
+  placeLevelSkills(scene, activePlats, sk);
 
   // Coins along ground
   for(let i=0;i<48;i++) makeCoin(scene, 180+i*112, 454-((i%4)*12));
@@ -1284,22 +1500,20 @@ function startLevel(scene,n) {
   scene.add.text(elevatorX,330,"↑ Press UP to ride",{fontSize:"12px",fill:"#aaffcc",stroke:"#000",strokeThickness:2}).setOrigin(0.5);
 
   // Player
-  player=scene.physics.add.sprite(120,430,avatars[selectedAvatar].sheetKey,FRAME_IDLE);
-  player.setDisplaySize(48,72);
+  player=scene.physics.add.sprite(120,410,avatars[selectedAvatar].sheetKey,FRAME_IDLE);
+  player.setDisplaySize(PLAYER_W, PLAYER_H);
   player.setCollideWorldBounds(false);
-  // Physics body: narrower than display so feet sit on platforms cleanly.
-  // setSize uses native-frame coordinates; at 396x793 native → 48x72 display,
-  // scale = 48/396 ≈ 0.121 (x) and 72/793 ≈ 0.091 (y).
-  // We want a 34x60px collision box centred on the display.
-  // In native coords: 34/0.121 ≈ 281 wide, 60/0.091 ≈ 659 tall.
-  // offsetX = (396-281)/2 ≈ 57,  offsetY = (793-659)/2 ≈ 67
-  player.body.setSize(281, 659, false);
-  player.body.setOffset(57, 67);
+  // Larger visible character with a narrower fair hitbox.
+  // setSize / setOffset use the native 396x793 frame coordinates.
+  player.body.setSize(PLAYER_BODY_W, PLAYER_BODY_H, false);
+  player.body.setOffset(PLAYER_BODY_OFFSET_X, PLAYER_BODY_OFFSET_Y);
   // Play idle anim immediately
   player.play(avatars[selectedAvatar].sheetKey+"_idle",true);
 
-  scene.physics.add.collider(player,platforms);
-  scene.physics.add.collider(enemies,platforms);
+  scene.physics.add.collider(player, platforms);
+  scene.physics.add.collider(player, oneWayPlatforms, null, canLandOnOneWayPlatform, scene);
+  scene.physics.add.collider(enemies, platforms);
+  scene.physics.add.collider(enemies, oneWayPlatforms, null, canLandOnOneWayPlatform, scene);
   scene.physics.add.collider(enemies,enemies,bumpEnemies,null,scene);
   scene.physics.add.overlap(player,coins,collectCoin,null,scene);
   scene.physics.add.overlap(player,skillItems,collectSkill,null,scene);
@@ -1351,41 +1565,68 @@ function drawUniqueBG(scene,n,level){
     case 10:drawBG_Boardroom(scene,g); break;
     default:drawBG_Lobby(scene,g); break;
   }
-  // Level title overlay
-  scene.add.text(160,145,level.name,{fontSize:"30px",fill:"#fff",stroke:"#000",strokeThickness:5,fontStyle:"bold"});
-  scene.add.text(160,182,level.theme,{fontSize:"16px",fill:"#ffd700",stroke:"#000",strokeThickness:3});
+  // Level title is shown in the HUD, not drawn into the scrolling background.
 }
 
 // BG 1: Corporate lobby — marble floors, tall windows, reception desk
 function drawBG_Lobby(scene,g){
-  // Sky through windows
-  g.fillGradientStyle(0x5ec2ff,0x5ec2ff,0x9dd8ff,0x9dd8ff,1); g.fillRect(0,0,WORLD_W,H);
-  // Building interior wall
-  g.fillStyle(0xe8e4dc,0.9); g.fillRect(0,0,WORLD_W,H);
-  // Tall windows repeating
-  for(let x=120;x<WORLD_W;x+=340){
-    g.fillStyle(0x5ec2ff,0.85); g.fillRect(x,40,160,320);
-    g.fillStyle(0xffffff,0.3); g.fillRect(x,40,50,320);
-    g.lineStyle(4,0x8a7a60,1); g.strokeRect(x,40,160,320);
-    g.lineStyle(2,0x8a7a60,1); g.strokeLineShape(new Phaser.Geom.Line(x+80,40,x+80,360));
-    g.strokeLineShape(new Phaser.Geom.Line(x,200,x+160,200));
+  g.clear();
+
+  // World 1-1 visual plan:
+  // Background remains simple and clean. The level art now comes from sliced tiles/props.
+  // This avoids full-screen seams and avoids rough code-drawn buildings.
+
+  g.fillGradientStyle(0x1678d7, 0x1678d7, 0x8bd8ff, 0x8bd8ff, 1);
+  g.fillRect(0, 0, WORLD_W, H);
+
+  // Far skyline. Low opacity so it reads as atmosphere.
+  for(let x=-W; x<WORLD_W + W*2; x+=W){
+    scene.add.image(x + W/2, H/2 + 16, "w1bgCity")
+      .setDisplaySize(W, H)
+      .setAlpha(0.30)
+      .setScrollFactor(0.32);
   }
-  // Marble floor pattern
-  g.fillStyle(0xd0c8b8,1); g.fillRect(0,470,WORLD_W,70);
-  for(let x=0;x<WORLD_W;x+=120){
-    g.lineStyle(1,0xb8b0a0,0.5); g.strokeLineShape(new Phaser.Geom.Line(x,470,x,540));
+
+  // A few soft cloud shapes for depth.
+  function cloud(cx, cy, s=1, alpha=0.50){
+    const cg=scene.add.graphics();
+    cg.setScrollFactor(0.18);
+    cg.fillStyle(0xffffff, alpha);
+    cg.fillCircle(cx, cy, 24*s);
+    cg.fillCircle(cx+30*s, cy+5*s, 20*s);
+    cg.fillCircle(cx-30*s, cy+7*s, 17*s);
+    cg.fillCircle(cx+5*s, cy-15*s, 18*s);
+    cg.fillStyle(0xb8dcff, alpha*0.45);
+    cg.fillRect(cx-54*s, cy+21*s, 112*s, 6*s);
   }
-  g.lineStyle(1,0xb8b0a0,0.5); g.strokeLineShape(new Phaser.Geom.Line(0,490,WORLD_W,490));
-  // Reception desks
-  for(let x=600;x<WORLD_W;x+=1800){
-    g.fillStyle(0x8a7060,1); g.fillRect(x,400,200,70); g.fillStyle(0xa08070,1); g.fillRect(x,398,200,8);
-    scene.add.text(x+100,422,"RECEPTION",{fontSize:"13px",fill:"#fff",fontStyle:"bold"}).setOrigin(0.5);
+
+  for(let x=130; x<WORLD_W+600; x+=680){
+    cloud(x, 125 + ((x/680)%3)*18, 0.95, 0.45);
+    cloud(x+320, 215 + ((x/680)%2)*18, 0.60, 0.35);
   }
-  // Plants
-  for(let x=300;x<WORLD_W;x+=500){
-    g.fillStyle(0x2a7a20,1); g.fillEllipse(x,440,40,50); g.fillEllipse(x-15,455,30,35); g.fillEllipse(x+15,458,28,32);
-    g.fillStyle(0x4a3820,1); g.fillRect(x-4,455,8,30);
+
+  // Subtle haze to bind background layers.
+  g.fillStyle(0x8bd8ff, 0.18);
+  g.fillRect(0, 195, WORLD_W, 260);
+
+  // Sliced World 1-1 props. These are visual only, not collision.
+  scene.add.image(300, 345, "w1BuildingLarge").setDisplaySize(610, 345).setDepth(-5);
+  scene.add.image(960, 395, "w1TreeLarge").setDisplaySize(205, 245).setDepth(-4);
+  scene.add.image(1240, 438, "w1Bench").setDisplaySize(150, 82).setDepth(-3);
+  scene.add.image(1460, 382, "w1LampPost").setDisplaySize(72, 230).setDepth(-3);
+  scene.add.image(1525, 390, "w1BlueBanner").setDisplaySize(70, 170).setDepth(-3);
+
+  for(let x=1820; x<WORLD_W; x+=760){
+    scene.add.image(x, 395, "w1TreeLarge").setDisplaySize(210, 250).setDepth(-4);
+    scene.add.image(x+255, 440, "w1Bench").setDisplaySize(150, 82).setDepth(-3);
+    scene.add.image(x+465, 382, "w1LampPost").setDisplaySize(72, 230).setDepth(-3);
+    scene.add.image(x+520, 390, "w1BlueBanner").setDisplaySize(70, 170).setDepth(-3);
+    scene.add.image(x-205, 455, "w1FlowerBed").setDisplaySize(220, 56).setDepth(-3);
   }
+
+  // Elevator visual near end of stage. Existing collision/goal logic still controls completion.
+  scene.add.image(WORLD_W-420, 385, "w1Elevator").setDisplaySize(190, 230).setDepth(-2);
+  scene.add.image(WORLD_W-420, 260, "w1ElevatorArrow").setDisplaySize(70, 55).setDepth(-2);
 }
 
 // BG 2: R&D Lab — white sterile walls, equipment silhouettes
@@ -1658,6 +1899,46 @@ function drawBG_Boardroom(scene,g){
 // ─── LEVEL BUILDERS ──────────────────────────────────────────────────────────
 function buildGroundWithGaps(scene,gaps){
   const tilew=32;
+
+  if(currentLevel === 1){
+    // Larger visual ground chunks using the sliced grass/stone assets.
+    const groundTopY = 500;
+    const visualH = 112;
+
+    let segmentStart = null;
+
+    function flushSegment(endX){
+      if(segmentStart === null) return;
+      const segW = Math.max(32, endX - segmentStart);
+      const cx = segmentStart + segW/2;
+
+      // Left/mid/right visual sections. Collision stays simple and invisible below.
+      scene.add.image(segmentStart + 48, groundTopY + 36, "w1GrassGroundLeft").setDisplaySize(96, visualH);
+      if(segW > 192){
+        scene.add.image(cx, groundTopY + 36, "w1GrassGroundMid").setDisplaySize(Math.max(64, segW - 192), visualH);
+      }
+      scene.add.image(endX - 48, groundTopY + 36, "w1GrassGroundRight").setDisplaySize(96, visualH);
+
+      segmentStart = null;
+    }
+
+    for(let x=0; x<WORLD_W; x+=tilew){
+      const inGap = gaps.some(gx=>x>=gx-SAFE_GAP_HALF_WIDTH&&x<=gx+SAFE_GAP_HALF_WIDTH);
+
+      if(!inGap && segmentStart === null) segmentStart = x;
+      if((inGap || x+tilew>=WORLD_W) && segmentStart !== null){
+        flushSegment(inGap ? x : x+tilew);
+      }
+
+      if(!inGap){
+        const r=scene.add.rectangle(x+16,516,tilew,32,0x000000,0);
+        scene.physics.add.existing(r,true);
+        platforms.add(r);
+      }
+    }
+    return;
+  }
+
   for(let x=0;x<WORLD_W;x+=tilew){
     // Gap is intentionally limited to ~96px so the character can clear it
     // with normal jump physics without needing a perfect edge jump.
@@ -1750,17 +2031,78 @@ function auditPlatformReachability(plats){
   });
 }
 
-function makePlatform(scene,x,y,w,type){
-  const tile=type==="shelf"?"shelfTile":type==="low"?"concreteTile":"stoneTile";
-  const tc=Math.ceil(w/32);
-  for(let i=0;i<tc;i++){
-    const tx=x-w/2+16+i*32;
-    scene.add.image(tx,y-6,tile).setDisplaySize(32,18);
-    scene.add.rectangle(tx,y-16,30,2,0xffffff,0.14);
-    scene.add.rectangle(tx,y+7,32,7,0x000000,0.22);
+function makePlatform(scene, x, y, w, type) {
+  // Platform collision design:
+  // - stone = fully solid from all directions
+  // - shelf / low = one-way from below, solid only when landing on top
+  const isOneWay = type === "shelf" || type === "low";
+
+  if(currentLevel === 1){
+    const leftKey = isOneWay ? "w1OneWayPlatformLeft" : "w1StonePlatformLeft";
+    const midKey  = isOneWay ? "w1OneWayPlatformMid"  : "w1StonePlatformMid";
+    const rightKey= isOneWay ? "w1OneWayPlatformRight": "w1StonePlatformRight";
+
+    const visualH = isOneWay ? 40 : 48;
+    scene.add.image(x - w/2 + 24, y, leftKey).setDisplaySize(48, visualH);
+    if(w > 96){
+      scene.add.image(x, y, midKey).setDisplaySize(Math.max(16, w-96), visualH);
+    }
+    scene.add.image(x + w/2 - 24, y, rightKey).setDisplaySize(48, visualH);
+
+    const r = scene.add.rectangle(x, y, w, 20, 0x000000, 0);
+    scene.physics.add.existing(r, true);
+    r.platformType = isOneWay ? "oneWay" : "solid";
+
+    if (isOneWay) oneWayPlatforms.add(r);
+    else platforms.add(r);
+    return;
   }
-  const r=scene.add.rectangle(x,y,w,20,0x000000,0);
-  scene.physics.add.existing(r,true); platforms.add(r);
+
+  const tile = type === "shelf" ? "shelfTile" : type === "low" ? "concreteTile" : "stoneTile";
+  const tc = Math.ceil(w / 32);
+
+  for (let i = 0; i < tc; i++) {
+    const tx = x - w / 2 + 16 + i * 32;
+    scene.add.image(tx, y - 6, tile).setDisplaySize(32, 18);
+
+    if (isOneWay) {
+      // Grey/low visual = jump-through platform.
+      scene.add.rectangle(tx, y - 17, 30, 3, 0xd8d8d8, 0.35);
+      scene.add.rectangle(tx, y + 7, 32, 7, 0x000000, 0.12);
+    } else {
+      // Stone visual = fully solid platform.
+      scene.add.rectangle(tx, y - 16, 30, 2, 0xffffff, 0.14);
+      scene.add.rectangle(tx, y + 7, 32, 7, 0x000000, 0.22);
+    }
+  }
+
+  const r = scene.add.rectangle(x, y, w, 20, 0x000000, 0);
+  scene.physics.add.existing(r, true);
+  r.platformType = isOneWay ? "oneWay" : "solid";
+
+  if (isOneWay) {
+    oneWayPlatforms.add(r);
+  } else {
+    platforms.add(r);
+  }
+}
+
+function canLandOnOneWayPlatform(obj, platform) {
+  if (!obj || !obj.body || !platform || !platform.body) return false;
+
+  const body = obj.body;
+  const platformTop = platform.body.top;
+
+  // Only land while falling downward. If moving upward, pass through.
+  if (body.velocity.y < 0) return false;
+
+  // Use the previous frame bottom so collision only happens when the object
+  // approached the platform from above, not from underneath or the side.
+  const previousBottom = body.prev
+    ? body.prev.y + body.height
+    : body.bottom;
+
+  return previousBottom <= platformTop + 6;
 }
 
 function auditJumpSafety(gaps){
@@ -1771,12 +2113,65 @@ function auditJumpSafety(gaps){
 }
 
 function makeCoin(scene,x,y){
-  const c=coins.create(x,y,"coinTex");
+  const useW1Coin = currentLevel === 1 && scene.textures.exists("w1CoinSheet") && scene.anims.exists("w1CoinSpin");
+  const c = useW1Coin ? coins.create(x,y,"w1CoinSheet") : coins.create(x,y,"coinTex");
+  if(useW1Coin){
+    c.setDisplaySize(34,34);
+    c.play("w1CoinSpin");
+  }
   sceneRef.tweens.add({targets:c,y:y-8,duration:600+Phaser.Math.Between(-100,100),yoyo:true,repeat:-1,ease:"Sine.easeInOut"});
 }
 
+function placeLevelSkills(scene, activePlats, skillLabels) {
+  const placed = new Set();
+
+  // First honor any platforms already marked as skill platforms.
+  const flaggedSkillPlats = activePlats
+    .filter(p => p.skill && p.skillIdx != null && p.skillIdx < skillLabels.length)
+    .sort((a, b) => a.skillIdx - b.skillIdx);
+
+  flaggedSkillPlats.forEach(p => {
+    if (placed.has(p.skillIdx)) return;
+    makeSkill(scene, p.x, p.y - 38, skillLabels[p.skillIdx]);
+    placed.add(p.skillIdx);
+  });
+
+  // If any skills are missing, place them across the level on reasonable platforms.
+  const fallbackPlats = activePlats
+    .filter(p => p.x > 350 && p.x < WORLD_W - 450 && p.y <= 430)
+    .sort((a, b) => a.x - b.x);
+
+  for (let i = 0; i < skillLabels.length; i++) {
+    if (placed.has(i)) continue;
+
+    const fallbackIndex = Math.min(
+      fallbackPlats.length - 1,
+      Math.max(0, Math.floor(((i + 1) / (skillLabels.length + 1)) * fallbackPlats.length))
+    );
+
+    const p = fallbackPlats[fallbackIndex];
+
+    if (p) {
+      makeSkill(scene, p.x, p.y - 38, skillLabels[i]);
+    } else {
+      // Emergency fallback, should rarely be used.
+      makeSkill(scene, 900 + i * 900, 390, skillLabels[i]);
+    }
+
+    placed.add(i);
+  }
+}
+
 function makeSkill(scene,x,y,label){
-  const s=skillItems.create(x,y,"skillTex"); s.label=label;
+  let tex = "skillTex";
+  if(currentLevel === 1){
+    const idx = (levels[currentLevel-1].skill || []).indexOf(label);
+    const preferred = idx === 0 ? "w1SkillGrowth" : idx === 1 ? "w1SkillPeople" : "w1SkillIdea";
+    if(scene.textures.exists(preferred)) tex = preferred;
+  }
+
+  const s=skillItems.create(x,y,tex); s.label=label;
+  if(currentLevel === 1 && tex !== "skillTex") s.setDisplaySize(44,44);
   sceneRef.tweens.add({targets:s,scaleX:1.12,scaleY:1.12,duration:700,yoyo:true,repeat:-1,ease:"Sine.easeInOut"});
 
   const labelBg=scene.add.rectangle(x,y+39,150,28,0x061830,0.88)
@@ -1796,16 +2191,34 @@ function makeSkill(scene,x,y,label){
 }
 
 function makePowerUp(scene,x,y){
+  // Use the built-in generated star texture for now.
+  // This avoids a missing-texture green box if the sliced star asset is not present or did not load.
   const p=powerUps.create(x,y,"powerStarTex");
-  p.setDisplaySize(34,34);
+  p.setDisplaySize(38,38);
   sceneRef.tweens.add({targets:p,y:y-10,duration:500,yoyo:true,repeat:-1,ease:"Sine.easeInOut"});
   sceneRef.tweens.add({targets:p,angle:360,duration:1100,repeat:-1,ease:"Linear"});
 }
 
 function makeEnemy(scene,x,y,kind="ground"){
-  const tex = kind==="dataBug" ? "enemyTex2" : (kind==="blocker" ? "enemyTex3" : "enemyTex");
+  const useLargeBot = currentLevel === 1 && kind==="blocker" && scene.textures.exists("w1LargeBotWalk") && scene.anims.exists("w1LargeBotWalkAnim");
+  const useSmallBot = currentLevel === 1 && kind!=="blocker" && scene.textures.exists("w1SmallBotWalk") && scene.anims.exists("w1SmallBotWalkAnim");
+
+  const tex = useLargeBot ? "w1LargeBotWalk"
+    : useSmallBot ? "w1SmallBotWalk"
+    : (kind==="dataBug" ? "enemyTex2" : (kind==="blocker" ? "enemyTex3" : "enemyTex"));
+
   const e=enemies.create(x,y,tex);
-  e.setDisplaySize(38,40);
+
+  if(useLargeBot){
+    e.setDisplaySize(66,55);
+    e.play("w1LargeBotWalkAnim");
+  } else if(useSmallBot){
+    e.setDisplaySize(42,48);
+    e.play("w1SmallBotWalkAnim");
+  } else {
+    e.setDisplaySize(38,40);
+  }
+
   e.setBounce(0,0);
   e.setCollideWorldBounds(false);
   e.body.allowGravity=true;
